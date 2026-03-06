@@ -215,11 +215,13 @@ public struct MotionView : View {
 
     /// Creates a MotionView from raw Lottie JSON data.
     public init(jsonData: Data, animationSpeed: Double = 1.0, loopMode: MotionLoopMode = .loop, isPlaying: Bool = true, contentMode: MotionContentMode = .fit, currentProgress: Double? = nil, fromProgress: Double? = nil, toProgress: Double? = nil, fromFrame: CGFloat? = nil, toFrame: CGFloat? = nil, enableMergePaths: Bool = false, currentFrame: CGFloat? = nil, onComplete: ((Bool) -> Void)? = nil) {
+        logger.info("[MotionView.init(jsonData:)] Starting — data size: \(jsonData.count) bytes, loopMode: \(String(describing: loopMode)), isPlaying: \(isPlaying), hasOnComplete: \(onComplete != nil)")
         var lottieContainer: LottieContainer? = nil
         do {
             lottieContainer = try LottieContainer(data: jsonData)
+            logger.info("[MotionView.init(jsonData:)] LottieContainer created successfully")
         } catch {
-            logger.error("Unable to parse Lottie data: \(error)")
+            logger.error("[MotionView.init(jsonData:)] Unable to parse Lottie data: \(error)")
         }
         self.lottieContainer = lottieContainer
         self.rawDotLottieData = nil
@@ -412,6 +414,7 @@ public struct MotionView : View {
         var composition: LottieComposition? = nil
 
         if let resourceName {
+            logger.info("[ComposeContent] Branch: resourceName='\(resourceName)'")
             // Named resource — async loading via LaunchedEffect
             let loadedComposition = remember { mutableStateOf<LottieComposition?>(nil) }
             let bundle = resourceBundle ?? Bundle.main
@@ -442,6 +445,7 @@ public struct MotionView : View {
 
             composition = loadedComposition.value
         } else if let rawDotLottieData {
+            logger.info("[ComposeContent] Branch: rawDotLottieData (\(rawDotLottieData.count) bytes)")
             // DotLottie raw data — async loading via LaunchedEffect
             let loadedComposition = remember { mutableStateOf<LottieComposition?>(nil) }
 
@@ -457,12 +461,17 @@ public struct MotionView : View {
 
             composition = loadedComposition.value
         } else if let lottieContainer {
+            logger.info("[ComposeContent] Branch: lottieContainer — hasComposition: \(lottieContainer.lottieComposition != nil)")
             composition = lottieContainer.lottieComposition
+        } else {
+            logger.warning("[ComposeContent] No source — resourceName=nil, rawDotLottieData=nil, lottieContainer=nil")
         }
 
         guard let composition else {
+            logger.warning("[ComposeContent] composition is nil — returning empty view")
             return
         }
+        logger.info("[ComposeContent] composition resolved — duration: \(composition.duration)ms, frames: \(composition.startFrame)-\(composition.endFrame)")
 
         // Calculate effective clip spec (frame-based takes priority over progress-based)
         var effectiveClipSpec = progressClipSpec
@@ -476,9 +485,10 @@ public struct MotionView : View {
         // SKIP INSERT: val lottieDynProps = buildMotionDynamicProperties(dynamicProperties.toList())
 
         let contentContext = context.content()
+        logger.info("[ComposeContent] Entering ComposeContainer — isPlaying: \(isPlaying), currentProgress: \(String(describing: currentProgress)), currentFrame: \(String(describing: currentFrame)), hasOnComplete: \(onComplete != nil)")
         ComposeContainer(modifier: context.modifier) { modifier in
             if !isPlaying, let progress = currentProgress {
-                // Paused at specific progress
+                logger.info("[ComposeContent] Playback branch: paused at progress \(progress)")
                 // SKIP REPLACE: LottieAnimation(composition, progress = { progress.toFloat() }, modifier = modifier.fillMaxSize(), contentScale = composeContentScale, dynamicProperties = lottieDynProps, enableMergePaths = enableMergePaths)
                 LottieAnimation(composition,
                                 progress: { progress.toFloat() },
@@ -486,7 +496,7 @@ public struct MotionView : View {
                                 contentScale: composeContentScale,
                                 enableMergePaths: enableMergePaths)
             } else if !isPlaying, let frame = currentFrame {
-                // Paused at specific frame
+                logger.info("[ComposeContent] Playback branch: paused at frame \(frame)")
                 let frameProgress = composition.getProgressForFrame(frame.toFloat())
                 // SKIP REPLACE: LottieAnimation(composition, progress = { frameProgress }, modifier = modifier.fillMaxSize(), contentScale = composeContentScale, dynamicProperties = lottieDynProps, enableMergePaths = enableMergePaths)
                 LottieAnimation(composition,
@@ -496,6 +506,7 @@ public struct MotionView : View {
                                 enableMergePaths: enableMergePaths)
             } else if let onComplete = onComplete {
                 // Animated playback with completion tracking
+                logger.info("[ComposeContent] Playback branch: onComplete with tracking — isPlaying: \(isPlaying), iterations: \(iterations), speed: \(animationSpeed)")
                 let animationState = animateLottieCompositionAsState(
                     composition: composition,
                     isPlaying: isPlaying,
@@ -504,10 +515,13 @@ public struct MotionView : View {
                     reverseOnRepeat: reverseOnRepeat,
                     clipSpec: effectiveClipSpec
                 )
+                logger.info("[ComposeContent] animationState created — isPlaying: \(animationState.isPlaying), isAtEnd: \(animationState.isAtEnd), progress: \(animationState.progress)")
 
                 let wasPlaying = remember { mutableStateOf(false) }
                 LaunchedEffect(animationState.isPlaying, animationState.isAtEnd) {
+                    logger.info("[ComposeContent] LaunchedEffect fired — wasPlaying: \(wasPlaying.value), animationState.isPlaying: \(animationState.isPlaying), isAtEnd: \(animationState.isAtEnd), progress: \(animationState.progress)")
                     if wasPlaying.value && !animationState.isPlaying {
+                        logger.info("[ComposeContent] Animation completed — calling onComplete(isAtEnd: \(animationState.isAtEnd))")
                         onComplete(animationState.isAtEnd)
                     }
                     wasPlaying.value = animationState.isPlaying
@@ -520,6 +534,7 @@ public struct MotionView : View {
                                 contentScale: composeContentScale,
                                 enableMergePaths: enableMergePaths)
             } else {
+                logger.info("[ComposeContent] Playback branch: normal animated (no onComplete)")
                 // Normal animated playback
                 // SKIP REPLACE: LottieAnimation(composition, modifier = modifier.fillMaxSize(), isPlaying = isPlaying, iterations = iterations, speed = animationSpeed.toFloat(), reverseOnRepeat = reverseOnRepeat, clipSpec = effectiveClipSpec, contentScale = composeContentScale, dynamicProperties = lottieDynProps, enableMergePaths = enableMergePaths)
                 LottieAnimation(composition,
@@ -558,11 +573,16 @@ public struct LottieContainer : Sendable {
         #if !SKIP
         self.lottieAnimation = try LottieAnimation.from(data: lottieData)
         #else
+        logger.info("[LottieContainer.init(data:)] Starting sync parse — data size: \(lottieData.count) bytes")
         let compositionResult = try LottieCompositionFactory.fromJsonInputStreamSync(lottieData.platformData.inputStream(), nil)
+        logger.info("[LottieContainer.init(data:)] fromJsonInputStreamSync returned — hasValue: \(compositionResult.getValue() != nil), hasException: \(compositionResult.getException() != nil)")
 
         guard let composition = compositionResult.getValue() else {
-            throw compositionResult.getException() ?? IllegalArgumentException("Unable to load composition from data")
+            let exception = compositionResult.getException()
+            logger.error("[LottieContainer.init(data:)] Composition is nil — exception: \(String(describing: exception))")
+            throw exception ?? IllegalArgumentException("Unable to load composition from data")
         }
+        logger.info("[LottieContainer.init(data:)] Composition parsed — duration: \(composition.duration)ms, startFrame: \(composition.startFrame), endFrame: \(composition.endFrame)")
         self.lottieComposition = composition
         #endif
     }
