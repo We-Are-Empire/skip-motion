@@ -506,7 +506,7 @@ public struct MotionView : View {
                                 enableMergePaths: enableMergePaths)
             } else if let onComplete = onComplete {
                 // Animated playback with completion tracking
-                logger.info("[ComposeContent] Playback branch: onComplete with tracking — isPlaying: \(isPlaying), iterations: \(iterations), speed: \(animationSpeed)")
+//                logger.info("[ComposeContent] Playback branch: onComplete with tracking — isPlaying: \(isPlaying), iterations: \(iterations), speed: \(animationSpeed)")
                 let animationState = animateLottieCompositionAsState(
                     composition: composition,
                     isPlaying: isPlaying,
@@ -515,7 +515,7 @@ public struct MotionView : View {
                     reverseOnRepeat: reverseOnRepeat,
                     clipSpec: effectiveClipSpec
                 )
-                logger.info("[ComposeContent] animationState created — isPlaying: \(animationState.isPlaying), isAtEnd: \(animationState.isAtEnd), progress: \(animationState.progress)")
+//                logger.info("[ComposeContent] animationState created — isPlaying: \(animationState.isPlaying), isAtEnd: \(animationState.isAtEnd), progress: \(animationState.progress)")
 
                 let wasPlaying = remember { mutableStateOf(false) }
                 LaunchedEffect(animationState.isPlaying, animationState.isAtEnd) {
